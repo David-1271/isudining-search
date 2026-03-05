@@ -257,194 +257,6 @@ function isLikelyMainEntree(categoryName, stationName, itemName) {
   return score >= 3;
 }
 
-/** Normalize name for matching (e.g. meal name lookup). */
-function normName(str) {
-  return (str || "")
-    .toString()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim();
-}
-
-/**
- * Build a display name for a group of items served together at one station.
- * Single item → that name. Multiple → "A with B and C".
- */
-function toDisplayName(itemNames) {
-  const list = itemNames.filter(Boolean);
-  if (list.length === 0) return "";
-  if (list.length === 1) return list[0];
-  if (list.length === 2) return `${list[0]} with ${list[1]}`;
-  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
-}
-
-/**
- * From raw location + date, build flat "dish" rows. Items in the same
- * (meal, station, category) are grouped into one dish with a combined
- * displayName (e.g. "Pita with Chicken and Rice") so the UI can show
- * coherent meals instead of separate ingredients.
- */
-function isLocationOpenToday(raw, date) {
-  // Check if location is actually open on the specified day
-  // weekHours contains the schedule for the week, with open: "0" for closed days
-  const weekHours = raw.weekHours || [];
-  if (!weekHours || weekHours.length === 0) return false;
-  
-  const dateStr = date.toISOString().slice(0, 10);
-  const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, etc.
-  
-  // First try to find exact date match in weekHours
-  for (const day of weekHours) {
-    if (day.date === dateStr) {
-      // If open is "0" or null/undefined, or start_time is null, location is closed
-      if (day.open === "0" || !day.open || day.start_time === null) {
-        return false;
-      }
-      return true;
-    }
-  }
-  
-  // If exact date not found, try matching by day of week index
-  // weekHours index: 0=Sunday, 1=Monday, etc.
-  for (const day of weekHours) {
-    if (day.index === dayOfWeek) {
-      if (day.open === "0" || !day.open || day.start_time === null) {
-        return false;
-      }
-      return true;
-    }
-  }
-  
-  // Fallback: if no match found, check todaysHours for active meals
-  const meals = raw.todaysHours || [];
-  if (!meals || meals.length === 0) return false;
-  return meals.some((m) => m && (m.active === "1" || m.active === 1));
-}
-
-function buildDishesForLocationDay(locWithDate) {
-  const { raw, date } = locWithDate;
-  const locationSlug = raw.slug;
-  const locationTitle = raw.title;
-  const facility = raw.facility;
-  const meals = raw.todaysHours || [];
-  const menus = raw.menus || [];
-
-  // Skip processing if location has no active hours on this day
-  if (!isLocationOpenToday(raw, date)) {
-    return [];
-  }
-
-  const mealByName = new Map();
-  meals.forEach((m) => {
-    if (!m || !m.name) return;
-    mealByName.set(normName(m.name), m);
-  });
-
-  const dishRows = [];
-
-  menus.forEach((menu) => {
-    if (!menu || !menu.section) return;
-    const mealName = menu.section;
-    const mealHour = mealByName.get(normName(mealName));
-    const startTime = mealHour?.start_time || null;
-    const endTime = mealHour?.end_time || null;
-    const active = mealHour ? mealHour.active === "1" || mealHour.active === 1 : null;
-
-    (menu.menuDisplays || []).forEach((display) => {
-      const stationName = display.name || null;
-      (display.categories || []).forEach((cat) => {
-        const categoryName = cat.name || null;
-        const items = (cat.items || cat.menuItems || []).filter(
-          (item) => item && item.name
-        );
-        const itemNames = items.map((item) => item.name);
-        if (itemNames.length === 0) return;
-
-        const displayName = toDisplayName(itemNames);
-        dishRows.push({
-          date: date.toISOString().slice(0, 10),
-          locationSlug,
-          locationTitle,
-          facility,
-          mealName,
-          stationName,
-          categoryName,
-          displayName,
-          itemNames,
-          startTime,
-          endTime,
-          active,
-        });
-      });
-    });
-  });
-
-  return dishRows;
-}
-
-/**
- * Full hierarchy: by date → locations → meals → stations → categories → dishes.
- * Each dish has { displayName, itemNames }.
- */
-function buildStructuredMenus(locResults) {
-  const byDate = {};
-  locResults.forEach((loc) => {
-    if (!loc) return;
-    const dishes = buildDishesForLocationDay(loc);
-    const dateStr = loc.date.toISOString().slice(0, 10);
-    if (!byDate[dateStr]) byDate[dateStr] = { locations: [] };
-
-    const byLocation = new Map();
-    dishes.forEach((d) => {
-      const key = d.locationSlug;
-      if (!byLocation.has(key)) {
-        byLocation.set(key, {
-          locationSlug: d.locationSlug,
-          locationTitle: d.locationTitle,
-          facility: d.facility,
-          meals: [],
-        });
-      }
-      const locEntry = byLocation.get(key);
-      let mealEntry = locEntry.meals.find((m) => m.mealName === d.mealName);
-      if (!mealEntry) {
-        mealEntry = {
-          mealName: d.mealName,
-          startTime: d.startTime,
-          endTime: d.endTime,
-          active: d.active,
-          stations: [],
-        };
-        locEntry.meals.push(mealEntry);
-      }
-      let stationEntry = mealEntry.stations.find(
-        (s) => s.stationName === d.stationName
-      );
-      if (!stationEntry) {
-        stationEntry = { stationName: d.stationName, categories: [] };
-        mealEntry.stations.push(stationEntry);
-      }
-      let catEntry = stationEntry.categories.find(
-        (c) => c.categoryName === d.categoryName
-      );
-      if (!catEntry) {
-        catEntry = {
-          categoryName: d.categoryName,
-          dishes: [],
-        };
-        stationEntry.categories.push(catEntry);
-      }
-      catEntry.dishes.push({
-        displayName: d.displayName,
-        itemNames: d.itemNames,
-      });
-    });
-    byDate[dateStr].locations = Array.from(byLocation.values());
-  });
-  return { byDate };
-}
-
 function flattenLocationDay(locWithDate) {
   const { raw, date } = locWithDate;
   const locationSlug = raw.slug;
@@ -453,15 +265,18 @@ function flattenLocationDay(locWithDate) {
   const meals = raw.todaysHours || [];
   const menus = raw.menus || [];
 
-  // Skip processing if location has no active hours on this day
-  if (!isLocationOpenToday(raw, date)) {
-    return [];
-  }
-
   const mealByName = new Map();
+  const norm = (name) =>
+    (name || "")
+      .toString()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim();
+
   meals.forEach((m) => {
     if (!m || !m.name) return;
-    mealByName.set(normName(m.name), m);
+    mealByName.set(norm(m.name), m);
   });
 
   const rows = [];
@@ -469,7 +284,7 @@ function flattenLocationDay(locWithDate) {
   menus.forEach((menu) => {
     if (!menu || !menu.section) return;
     const mealName = menu.section;
-    const mealHour = mealByName.get(normName(mealName));
+    const mealHour = mealByName.get(norm(mealName));
     const startTime = mealHour?.start_time || null;
     const endTime = mealHour?.end_time || null;
     const active = mealHour ? mealHour.active === "1" || mealHour.active === 1 : null;
@@ -514,8 +329,6 @@ app.get("/api/menu", async (req, res) => {
 
   try {
     const allEntries = [];
-    const allDishes = [];
-    const allLocationResults = [];
 
     for (let offset = 0; offset < days; offset++) {
       const date = new Date(today);
@@ -529,20 +342,12 @@ app.get("/api/menu", async (req, res) => {
       );
 
       const perDayResults = await Promise.all(perDayPromises);
-      perDayResults.filter((loc) => loc && isLocationOpenToday(loc.raw, date)).forEach((loc) => {
-        allEntries.push(...flattenLocationDay(loc));
-        allDishes.push(...buildDishesForLocationDay(loc));
-        allLocationResults.push(loc);
-      });
+      perDayResults
+        .filter(Boolean)
+        .forEach((loc) => allEntries.push(...flattenLocationDay(loc)));
     }
 
-    const structured = buildStructuredMenus(allLocationResults);
-
-    res.json({
-      entries: allEntries,
-      dishes: allDishes,
-      structured,
-    });
+    res.json({ entries: allEntries });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Failed to load menus" });
