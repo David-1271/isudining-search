@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ISU Dining Favorites</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="container">
+        <h1>ISU Dining Favorites</h1>
+        <p>See when your favorite foods are served this week.</p>
+      </div>
+    </header>
+
+    <main class="container layout">
+      <section class="panel">
+        <h2>1. Choose your foods</h2>
+        <p class="muted">
+          This list is built from the current week of ISU Dining menus. Your
+          choices are remembered on this browser.
+        </p>
+        <div class="controls-row">
+          <label>
+            Days to look ahead:
+            <select id="days-select">
+              <option value="3">3 days</option>
+              <option value="7" selected>7 days</option>
+              <option value="10">10 days</option>
+              <option value="14">14 days</option>
+            </select>
+          </label>
+          <button id="reload-btn">Reload menus</button>
+        </div>
+        <div class="search-row">
+          <input
+            id="food-search"
+            class="search-input"
+            type="text"
+            placeholder="Search main dishes (e.g. orange chicken, beef and broccoli)…"
+          />
+        </div>
+        <div id="foods-loading" class="status">Loading menus…</div>
+        <div id="foods-error" class="status status-error hidden"></div>
+        <div id="foods-list" class="foods-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>2. When are they served?</h2>
+        <p class="muted">
+          Pick some foods on the left to see upcoming times and locations.
+        </p>
+        <div id="results-empty" class="status">
+          No foods selected yet. Check at least one item.
+        </div>
+        <div id="results" class="results hidden"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <small>
+          Not an official Iowa State University tool. Menu data from
+          dining.iastate.edu.
+        </small>
+      </div>
+    </footer>
+
+    <script>
+      window.ISU_DINING_API_BASE = "https://isudining-search.onrender.com";
+    </script>
+    <script src="main.js" type="module"></script>
+  </html>
+
