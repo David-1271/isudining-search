@@ -55,76 +55,123 @@ async function fetchMenu(days) {
     throw new Error(`API error: ${res.status}`);
   }
   const data = await res.json();
-  return data.entries || [];
+  // Prefer grouped dishes (location → station → combined dish names); fallback to flat entries
+  return {
+    entries: data.entries || [],
+    dishes: data.dishes || [],
+    structured: data.structured || null,
+  };
+}
+
+/**
+ * Build list of display names for the food list.
+ * When using dishes: unique displayName (grouped dishes like "Pita with Chicken and Rice").
+ * When using entries: unique itemName (legacy flat list).
+ */
+function getDisplayNames(data) {
+  if (data.dishes && data.dishes.length > 0) {
+    return Array.from(
+      new Set(data.dishes.map((d) => d.displayName).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+  }
+  return Array.from(
+    new Set((data.entries || []).map((e) => e.itemName).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Check if a display name or its components match the search query.
+ * For dishes we also match itemNames (e.g. "chicken" matches "Pita with Chicken and Rice").
+ */
+function displayNameMatchesQuery(displayName, itemNames, query) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (displayName.toLowerCase().includes(q)) return true;
+  if (itemNames && itemNames.some((n) => n.toLowerCase().includes(q)))
+    return true;
+  return false;
 }
 
 function renderFoodsList(
-  entries,
+  data,
   favorites,
   { foodsListEl, loadingEl, errorEl, searchEl, onFavoritesChanged }
 ) {
-  // Use all items from the API, no entree restrictions.
-  const allNames = Array.from(
-    new Set(entries.map((e) => e.itemName).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  const entries = data.entries || [];
+  const dishes = data.dishes || [];
+  const useDishes = dishes.length > 0;
+
+  const allNames = getDisplayNames(data);
+  // For search we need displayName + itemNames when using dishes
+  const nameToItemNames = new Map();
+  if (useDishes) {
+    dishes.forEach((d) => {
+      if (!nameToItemNames.has(d.displayName))
+        nameToItemNames.set(d.displayName, d.itemNames || []);
+    });
+  }
 
   const renderGrid = () => {
     const query = (searchEl.value || "").trim().toLowerCase();
     const names = query
-      ? allNames.filter((n) => n.toLowerCase().includes(query))
+      ? allNames.filter((name) =>
+          useDishes
+            ? displayNameMatchesQuery(name, nameToItemNames.get(name), query)
+            : name.toLowerCase().includes(query)
+        )
       : allNames;
 
-  foodsListEl.innerHTML = "";
+    foodsListEl.innerHTML = "";
 
     if (!names.length) {
-    foodsListEl.innerHTML =
+      foodsListEl.innerHTML =
         '<div class="status">No dishes match this search.</div>';
-    return;
-  }
+      return;
+    }
 
-  const grid = document.createElement("div");
-  grid.className = "foods-grid";
+    const grid = document.createElement("div");
+    grid.className = "foods-grid";
 
     names.forEach((name) => {
-    const id = `food-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    const label = document.createElement("label");
-    label.className = "food-pill";
-    if (favorites.has(name)) label.classList.add("selected");
+      const id = `food-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const label = document.createElement("label");
+      label.className = "food-pill";
+      if (favorites.has(name)) label.classList.add("selected");
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.id = id;
-    checkbox.checked = favorites.has(name);
-    checkbox.dataset.foodName = name;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = id;
+      checkbox.checked = favorites.has(name);
+      checkbox.dataset.foodName = name;
 
-    const span = document.createElement("span");
-    span.textContent = name;
+      const span = document.createElement("span");
+      span.textContent = name;
 
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) {
-        favorites.add(name);
-        label.classList.add("selected");
-      } else {
-        favorites.delete(name);
-        label.classList.remove("selected");
-      }
-      saveFavorites(favorites);
-      if (onFavoritesChanged) {
-        onFavoritesChanged();
-      }
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          favorites.add(name);
+          label.classList.add("selected");
+        } else {
+          favorites.delete(name);
+          label.classList.remove("selected");
+        }
+        saveFavorites(favorites);
+        if (onFavoritesChanged) {
+          onFavoritesChanged();
+        }
+      });
+
+      label.appendChild(checkbox);
+      label.appendChild(span);
+      grid.appendChild(label);
     });
 
-    label.appendChild(checkbox);
-    label.appendChild(span);
-    grid.appendChild(label);
-  });
-
-  foodsListEl.appendChild(grid);
+    foodsListEl.appendChild(grid);
   };
 
   if (!allNames.length) {
     foodsListEl.innerHTML =
-      '<div class="status">No main dishes found for this range.</div>';
+      '<div class="status">No dishes found for this range.</div>';
   } else {
     renderGrid();
   }
@@ -137,7 +184,39 @@ function renderFoodsList(
   errorEl.classList.add("hidden");
 }
 
-function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
+/**
+ * One "occurrence" row for display. Same shape whether from dish or entry.
+ */
+function toOccurrence(dishOrEntry) {
+  if (dishOrEntry.displayName !== undefined) {
+    return {
+      date: dishOrEntry.date,
+      locationTitle: dishOrEntry.locationTitle,
+      facility: dishOrEntry.facility,
+      mealName: dishOrEntry.mealName,
+      stationName: dishOrEntry.stationName,
+      categoryName: dishOrEntry.categoryName,
+      startTime: dishOrEntry.startTime,
+      endTime: dishOrEntry.endTime,
+      active: dishOrEntry.active,
+      displayName: dishOrEntry.displayName,
+    };
+  }
+  return {
+    date: dishOrEntry.date,
+    locationTitle: dishOrEntry.locationTitle,
+    facility: dishOrEntry.facility,
+    mealName: dishOrEntry.mealName,
+    stationName: dishOrEntry.stationName,
+    categoryName: dishOrEntry.categoryName,
+    startTime: dishOrEntry.startTime,
+    endTime: dishOrEntry.endTime,
+    active: dishOrEntry.active,
+    displayName: dishOrEntry.itemName,
+  };
+}
+
+function renderResults(data, favorites, { onRemoveFavorite } = {}) {
   const resultsEl = document.getElementById("results");
   const emptyEl = document.getElementById("results-empty");
 
@@ -148,7 +227,14 @@ function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
     return;
   }
 
-  const selected = entries.filter((e) => favorites.has(e.itemName));
+  const dishes = data.dishes || [];
+  const entries = data.entries || [];
+  const useDishes = dishes.length > 0;
+
+  const selected = useDishes
+    ? dishes.filter((d) => favorites.has(d.displayName))
+    : entries.filter((e) => favorites.has(e.itemName));
+
   if (!selected.length) {
     resultsEl.classList.remove("hidden");
     emptyEl.classList.add("hidden");
@@ -159,8 +245,9 @@ function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
 
   const byFood = new Map();
   selected.forEach((e) => {
-    if (!byFood.has(e.itemName)) byFood.set(e.itemName, []);
-    byFood.get(e.itemName).push(e);
+    const name = useDishes ? e.displayName : e.itemName;
+    if (!byFood.has(name)) byFood.set(name, []);
+    byFood.get(name).push(toOccurrence(e));
   });
 
   byFood.forEach((list) =>
@@ -189,8 +276,9 @@ function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
     title.textContent = name;
     const count = document.createElement("span");
     count.className = "result-count";
-    count.textContent = `${byFood.get(name).length} upcoming ${
-      byFood.get(name).length === 1 ? "time" : "times"
+    const list = byFood.get(name);
+    count.textContent = `${list.length} upcoming ${
+      list.length === 1 ? "time" : "times"
     }`;
 
     const actions = document.createElement("div");
@@ -214,7 +302,7 @@ function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
     header.appendChild(actions);
     group.appendChild(header);
 
-    byFood.get(name).forEach((e) => {
+    list.forEach((e) => {
       const row = document.createElement("div");
       row.className = "occurrence";
 
@@ -277,21 +365,21 @@ async function init() {
   const searchEl = document.getElementById("food-search");
 
   const favorites = loadFavorites();
-  let currentEntries = [];
+  let currentData = { entries: [], dishes: [], structured: null };
 
   function refreshViews() {
-    renderFoodsList(currentEntries, favorites, {
+    renderFoodsList(currentData, favorites, {
       foodsListEl,
       loadingEl: foodsLoadingEl,
       errorEl: foodsErrorEl,
       searchEl,
       onFavoritesChanged: () => {
-        renderResults(currentEntries, favorites, {
+        renderResults(currentData, favorites, {
           onRemoveFavorite: handleRemoveFavorite,
         });
       },
     });
-    renderResults(currentEntries, favorites, {
+    renderResults(currentData, favorites, {
       onRemoveFavorite: handleRemoveFavorite,
     });
   }
@@ -319,8 +407,8 @@ async function init() {
 
     const days = parseInt(daysSelect.value, 10) || 7;
     try {
-      const entries = await fetchMenu(days);
-      currentEntries = entries;
+      const data = await fetchMenu(days);
+      currentData = data;
       refreshViews();
     } catch (err) {
       console.error(err);
