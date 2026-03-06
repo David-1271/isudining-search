@@ -7,10 +7,6 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 
-// Slugs for dining halls we care about
-// - Seasons Marketplace
-// - Union Drive Marketplace
-// - Friley Windows
 const LOCATION_SLUGS = [
   "seasons-marketplace-2-2",
   "union-drive-marketplace-2-2",
@@ -35,8 +31,7 @@ async function fetchLocationForDate(slug, date) {
   if (!Array.isArray(json) || json.length === 0) {
     return null;
   }
-  const loc = json[0];
-  return { raw: loc, date };
+  return { raw: json[0], date };
 }
 
 function scoreMenuItem(categoryName, stationName, itemName) {
@@ -44,217 +39,70 @@ function scoreMenuItem(categoryName, stationName, itemName) {
   const s = (stationName || "").toLowerCase();
   const i = (itemName || "").toLowerCase();
 
-  // Keywords that suggest "not a main dish"
   const badCategoryKeywords = [
-    "condiment",
-    "condiments",
-    "topping",
-    "toppings",
-    "sauce",
-    "salsas",
-    "dressings",
-    "dressing",
-    "beverage",
-    "beverages",
-    "drink",
-    "drinks",
-    "cereal",
-    "milk",
-    "yogurt",
-    "fruit",
-    "fruit bar",
-    "salad bar",
-    "salad toppings",
-    "salads & sides",
-    "side",
-    "sides",
-    "dessert",
-    "desserts",
-    "ice cream",
-    "bakery",
-    "bread",
-    "breads",
-    "rolls",
-    "soup station",
-    "soup & salad",
-    "soup",
+    "condiment","condiments","topping","toppings","sauce","salsas",
+    "dressings","dressing","beverage","beverages","drink","drinks",
+    "cereal","milk","yogurt","fruit","fruit bar","salad bar",
+    "salad toppings","salads & sides","side","sides","dessert",
+    "desserts","ice cream","bakery","bread","breads","rolls",
+    "soup station","soup & salad","soup",
   ];
-
   const badItemKeywords = [
-    "ketchup",
-    "mustard",
-    "relish",
-    "mayo",
-    "mayonnaise",
-    "bbq sauce",
-    "barbecue sauce",
-    "hot sauce",
-    "salsa",
-    "salsa bar",
-    "salt",
-    "pepper",
-    "brown sugar",
-    "white sugar",
-    "sugar",
-    "syrup",
-    "butter",
-    "margarine",
-    "jam",
-    "jelly",
-    "honey",
-    "sliced tomato",
-    "sliced tomatoes",
-    "sliced carrot",
-    "sliced carrots",
-    "sliced cucumber",
-    "sliced cucumbers",
-    "shredded carrot",
-    "shredded carrots",
-    "shredded lettuce",
-    "diced tomato",
-    "diced tomatoes",
+    "ketchup","mustard","relish","mayo","mayonnaise","bbq sauce",
+    "barbecue sauce","hot sauce","salsa","salsa bar","salt","pepper",
+    "brown sugar","white sugar","sugar","syrup","butter","margarine",
+    "jam","jelly","honey","sliced tomato","sliced tomatoes",
+    "sliced carrot","sliced carrots","sliced cucumber","sliced cucumbers",
+    "shredded carrot","shredded carrots","shredded lettuce",
+    "diced tomato","diced tomatoes",
   ];
-
   const simpleVegWords = [
-    "lettuce",
-    "romaine",
-    "spinach",
-    "tomato",
-    "tomatoes",
-    "carrot",
-    "carrots",
-    "cucumber",
-    "cucumbers",
-    "onion",
-    "onions",
-    "peppers",
-    "green peppers",
-    "jalapeno",
-    "jalapenos",
-    "mushroom",
-    "mushrooms",
-    "olives",
-    "pickles",
+    "lettuce","romaine","spinach","tomato","tomatoes","carrot","carrots",
+    "cucumber","cucumbers","onion","onions","peppers","green peppers",
+    "jalapeno","jalapenos","mushroom","mushrooms","olives","pickles",
   ];
-
   const proteinWords = [
-    "chicken",
-    "beef",
-    "pork",
-    "turkey",
-    "tofu",
-    "fish",
-    "salmon",
-    "tuna",
-    "ham",
-    "bacon",
-    "sausage",
-    "meatball",
-    "meatballs",
-    "egg",
-    "eggs",
+    "chicken","beef","pork","turkey","tofu","fish","salmon","tuna",
+    "ham","bacon","sausage","meatball","meatballs","egg","eggs",
   ];
-
   const dishWords = [
-    "pizza",
-    "pasta",
-    "stir fry",
-    "stir-fry",
-    "casserole",
-    "sandwich",
-    "sandwiches",
-    "taco",
-    "tacos",
-    "bowl",
-    "wrap",
-    "burger",
-    "burgers",
-    "noodles",
-    "alfredo",
-    "lasagna",
-    "enchilada",
-    "enchiladas",
-    "quesadilla",
-    "quesadillas",
+    "pizza","pasta","stir fry","stir-fry","casserole","sandwich",
+    "sandwiches","taco","tacos","bowl","wrap","burger","burgers",
+    "noodles","alfredo","lasagna","enchilada","enchiladas",
+    "quesadilla","quesadillas",
   ];
-
   const methodWords = [
-    "grilled",
-    "roasted",
-    "baked",
-    "fried",
-    "blackened",
-    "seared",
-    "smoked",
-    "glazed",
-    "marinated",
-    "breaded",
+    "grilled","roasted","baked","fried","blackened","seared",
+    "smoked","glazed","marinated","breaded",
   ];
 
   const words = i.split(/\s+/).filter(Boolean);
   let score = 0;
 
-  // Category-based signals
-  if (badCategoryKeywords.some((k) => c.includes(k) || s.includes(k))) {
-    score -= 4;
-  }
+  if (badCategoryKeywords.some((k) => c.includes(k) || s.includes(k))) score -= 4;
 
   const goodCategoryKeywords = [
-    "entrée",
-    "entree",
-    "entrees",
-    "main dish",
-    "main course",
-    "chef's table",
-    "grill",
-    "pizza",
-    "pasta",
-    "homestyle",
-    "global",
-    "international",
+    "entrée","entree","entrees","main dish","main course",
+    "chef's table","grill","pizza","pasta","homestyle","global","international",
   ];
-  if (goodCategoryKeywords.some((k) => c.includes(k) || s.includes(k))) {
-    score += 4;
-  }
-
-  // Item-name penalties
-  if (badItemKeywords.some((k) => i === k || i.includes(k))) {
-    score -= 4;
-  }
+  if (goodCategoryKeywords.some((k) => c.includes(k) || s.includes(k))) score += 4;
+  if (badItemKeywords.some((k) => i === k || i.includes(k))) score -= 4;
 
   const allVegWords = words.length > 0 && words.every((w) =>
     simpleVegWords.some((v) => v === w || v.includes(w) || w.includes(v))
   );
-  if (allVegWords && words.length <= 3) {
-    score -= 3;
-  }
-
-  if (words.length === 1 && words[0].length <= 5) {
-    score -= 1;
-  }
-
-  // Item-name positive signals
-  if (proteinWords.some((p) => i.includes(p))) {
-    score += 3;
-  }
-  if (dishWords.some((d) => i.includes(d))) {
-    score += 3;
-  }
-  if (methodWords.some((m) => i.includes(m))) {
-    score += 2;
-  }
-
-  if (words.length >= 2) {
-    score += 1;
-  }
+  if (allVegWords && words.length <= 3) score -= 3;
+  if (words.length === 1 && words[0].length <= 5) score -= 1;
+  if (proteinWords.some((p) => i.includes(p))) score += 3;
+  if (dishWords.some((d) => i.includes(d))) score += 3;
+  if (methodWords.some((m) => i.includes(m))) score += 2;
+  if (words.length >= 2) score += 1;
 
   return score;
 }
 
 function isLikelyMainEntree(categoryName, stationName, itemName) {
-  const score = scoreMenuItem(categoryName, stationName, itemName);
-  // Only keep items with reasonably strong "main dish" signal
-  return score >= 3;
+  return scoreMenuItem(categoryName, stationName, itemName) >= 3;
 }
 
 function flattenLocationDay(locWithDate) {
@@ -265,7 +113,6 @@ function flattenLocationDay(locWithDate) {
   const meals = raw.todaysHours || [];
   const menus = raw.menus || [];
 
-  const mealByName = new Map();
   const norm = (name) =>
     (name || "")
       .toString()
@@ -274,9 +121,30 @@ function flattenLocationDay(locWithDate) {
       .replace(/[^a-z0-9\s]/g, "")
       .trim();
 
+  // The ISU Dining API uses inconsistent names between todaysHours and menus.
+  // This maps the normalized hours name to the normalized menu section name
+  // so active/inactive status is correctly applied.
+  //
+  // Known mismatches:
+  //   "Untitled"       in hours → "Dinner" in menus  (Union Drive)
+  //   "Brunch / Lunch" in hours → "Lunch"  in menus  (Seasons on weekends)
+  //   "Brunch"         in hours → "Lunch"  in menus
+  const HOUR_ALIASES = {
+    "untitled":      "dinner",
+    "brunch lunch":  "lunch",
+    "brunch":        "lunch",
+  };
+
+  const mealByName = new Map();
   meals.forEach((m) => {
     if (!m || !m.name) return;
-    mealByName.set(norm(m.name), m);
+    const key = norm(m.name);
+    mealByName.set(key, m);
+    // Also register under the canonical menu-section name so lookups succeed
+    const alias = HOUR_ALIASES[key];
+    if (alias && !mealByName.has(alias)) {
+      mealByName.set(alias, m);
+    }
   });
 
   const rows = [];
@@ -287,7 +155,13 @@ function flattenLocationDay(locWithDate) {
     const mealHour = mealByName.get(norm(mealName));
     const startTime = mealHour?.start_time || null;
     const endTime = mealHour?.end_time || null;
-    const active = mealHour ? mealHour.active === "1" || mealHour.active === 1 : null;
+
+    // No matching hour = no open/closed signal — skip to be safe.
+    const active = mealHour
+      ? mealHour.active === "1" || mealHour.active === 1
+      : false;
+
+    if (!active) return;
 
     (menu.menuDisplays || []).forEach((display) => {
       const stationName = display.name || null;
@@ -295,7 +169,6 @@ function flattenLocationDay(locWithDate) {
         const categoryName = cat.name || null;
         (cat.items || cat.menuItems || []).forEach((item) => {
           if (!item || !item.name) return;
-          const itemName = item.name;
           rows.push({
             date: date.toISOString().slice(0, 10),
             locationSlug,
@@ -304,11 +177,11 @@ function flattenLocationDay(locWithDate) {
             mealName,
             stationName,
             categoryName,
-            itemName,
+            itemName: item.name,
             startTime,
             endTime,
             active,
-            isEntree: isLikelyMainEntree(categoryName, stationName, itemName),
+            isEntree: isLikelyMainEntree(categoryName, stationName, item.name),
           });
         });
       });
@@ -319,10 +192,7 @@ function flattenLocationDay(locWithDate) {
 }
 
 app.get("/api/menu", async (req, res) => {
-  const days = Math.max(
-    1,
-    Math.min(14, parseInt(req.query.days, 10) || 7)
-  );
+  const days = Math.max(1, Math.min(14, parseInt(req.query.days, 10) || 7));
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -361,4 +231,3 @@ app.get("/api/health", (req, res) => {
 app.listen(PORT, () => {
   console.log(`ISU Dining API server listening on port ${PORT}`);
 });
-

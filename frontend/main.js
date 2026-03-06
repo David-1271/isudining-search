@@ -148,7 +148,8 @@ function renderResults(entries, favorites, { onRemoveFavorite } = {}) {
     return;
   }
 
-  const selected = entries.filter((e) => favorites.has(e.itemName));
+  // Only show entries from open dining halls (active meal periods).
+  const selected = entries.filter((e) => favorites.has(e.itemName) && e.active !== false);
   if (!selected.length) {
     resultsEl.classList.remove("hidden");
     emptyEl.classList.add("hidden");
@@ -338,4 +339,3 @@ async function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
-

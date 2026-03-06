@@ -1,6 +1,10 @@
 package us.jmay.menu;
 
 public class Menu {
-    public String section;
-    public MenuDisplay[] menuDisplays;
+
+    private String section;
+    private MenuDisplay[] menuDisplays;
+
+    public String getSection() { return section; }
+    public MenuDisplay[] getMenuDisplays() { return menuDisplays; }
 }

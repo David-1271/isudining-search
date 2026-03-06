@@ -1,7 +1,10 @@
 package us.jmay.menu;
 
 public class MenuItem {
-    public String name;
+
+    private String name;
+
+    public String getName() { return name; }
 
     @Override
     public String toString() {
